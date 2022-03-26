@@ -2,11 +2,11 @@ import datetime
 import sqlite3
 import json
 
-db_path = 'C:\\Users\\yiyan\\Documents\\StS_data\\Spire.db'
+db_path = 'C:\\Users\\yiyan\\StS_data\\Spire.db'
 file_out = 'A20_chains_a3.json'
 lazy_file_out = 'A20_chains_a3_lazy.json'
 win_floor = 52
-min_len = 5
+min_len = 2
 chain_win_start = int(datetime.datetime(2020, 1, 14, 0, 0).timestamp())
 
 try:
@@ -14,7 +14,8 @@ try:
     con = sqlite3.connect(db_path)
     data_sql = con.execute('SELECT PlayId, PlayerExperience, Playtime, '
                            'Timestamp, '
-                           '(BuildVersion >= \'2020-01-14\') '
+                           '(BuildVersion BETWEEN \'2020-01-14\' AND '
+                           '\'2020-07-30\') '
                            'AND (AscensionLevel = 20) '
                            'AND (Clean = 1), '
                            'AdjustedFloorReached '
@@ -108,30 +109,38 @@ for ch in cand_chains:
     if len(chA20) >= min_len:
         lazy_chains.append(chA20)
         
-# Calculates win rate, floor adjusted win rate, and total number of floors
+# Calculates number of wins, number of false starts, floor weighted win rate,
+# and total number of floors
 def winrates(ch):
     nwins = 0
     nfloors = 0
+    nfalse = 0
     for r in ch:
         fr = r[5]
+        
         nfloors += min(fr, win_floor)
+        
         if fr >= win_floor:
             nwins += 1
             
         if nfloors == 0:
-            fawr = 0
+            fwwr = 0
         else:
-            fawr = win_floor * nwins / nfloors
+            fwwr = win_floor * nwins / nfloors
+            
+        if fr == 0:
+            nfalse += 1
     
-    return (nwins / len(ch), fawr, nfloors)
+    return (nwins, fwwr, nfloors, nfalse)
 
 # Write lazy chains to JSON
 lazy_chain_dicts = []
 for ch in lazy_chains:
-    wr, fawr, nfloors = winrates(ch)
+    nwins, fwwr, nfloors, nfalse = winrates(ch)
     ids = [r[0] for r in ch]
-    lazy_chain_dicts.append({'play_ids':ids, 'wr':wr, 'fawr':fawr,
-                             'nruns':len(ch), 'nfloors':nfloors})
+    lazy_chain_dicts.append({'play_ids':ids, 'nwins':nwins, 'fwwr':fwwr,
+                             'nruns':len(ch), 'nfloors':nfloors,
+                             'nfalse':nfalse})
 
 with open(lazy_file_out, 'w') as jfile:
     jfile.write(json.JSONEncoder().encode(lazy_chain_dicts))
@@ -182,10 +191,11 @@ for ch in cand_chains:
 # Write chains to JSON
 chain_dicts = []
 for ch in final_chains:
-    wr, fawr, nfloors = winrates(ch)
+    nwins, fwwr, nfloors, nfalse = winrates(ch)
     ids = [r[0] for r in ch]
-    chain_dicts.append({'play_ids':ids, 'wr':wr, 'fawr':fawr,
-                        'nruns':len(ch), 'nfloors':nfloors})
+    chain_dicts.append({'play_ids':ids, 'nwins':nwins, 'fwwr':fwwr,
+                        'nruns':len(ch), 'nfloors':nfloors,
+                        'nfalse':nfalse})
 
 with open(file_out, 'w') as jfile:
     jfile.write(json.JSONEncoder().encode(chain_dicts))
